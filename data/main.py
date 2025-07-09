@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
 from pathlib import Path
 from typing import Optional, Annotated
-from base64 import b64encode
+from base64 import urlsafe_b64encode
 from json import loads
 import yaml
 
@@ -129,7 +129,9 @@ def get_link(authorization: str | None = Header(default=None)):
     # Открыть файл ~/ss/ss_config.json, распарсить, отправить настройки
     with open(SS_CONFIG) as json_file:
         ss_data = loads(json_file.read())
+    # Инбаунд ShadowSocks-AEAD сервера
     inbound_list = [inbound for inbound in ss_data['inbounds'] if inbound['protocol'] == 'shadowsocks']
+    # На сервере должен быть как минимум один инбаунд, работаем с первым
     inbound = inbound_list[0] if inbound_list else None
 
     # блок inbounds: {protocol: shadowsocks, ...} найден, вывести настройки
@@ -137,9 +139,10 @@ def get_link(authorization: str | None = Header(default=None)):
         _port = inbound['port']
         _method = inbound['settings']['method']
         _passwd = inbound['settings']['password']
-        settings_line_bytes = f'{_method}:{_passwd}@{HOST}:{_port}'.encode('ascii')
-        encoded_settings = b64encode(settings_line_bytes).decode('ascii')
-        content = {'settings': encoded_settings}
+        _b_method_passwd = f'{_method}:{_passwd}'.encode('utf-8')
+        _str_method_passwd = urlsafe_b64encode(_b_method_passwd).decode('utf-8')
+        ss_aead_scheme = f'{_str_method_passwd}@{HOST}:{_port}'
+        content = {'settings': ss_aead_scheme}
 
     # блок inbound.protocol == 'shadowsocks' не найден, нет клиентов
     else:
